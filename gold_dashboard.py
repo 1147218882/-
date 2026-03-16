@@ -24,7 +24,7 @@ if "history" not in st.session_state:
 today_str = datetime.now().strftime("%Y/%m/%d")
 
 # ======================
-# 侧边栏：今日数据录入（和你表格字段完全一致）
+# 侧边栏：今日数据录入
 # ======================
 with st.sidebar:
     st.subheader("📝 输入今日数据")
@@ -57,20 +57,24 @@ with st.sidebar:
             st.warning("今日数据已存在")
 
 # ======================
-# 核心：100% 复刻你 Excel 的所有公式
+# 核心：100% 复刻你 Excel 的所有公式（修复第一行数据问题）
 # ======================
 def calc_all_signals(df):
     df = df.copy()
     # 1. 实际利率 = 美债 - 通胀（H列）
     df["实际利率"] = df["美债"] - df["通胀"]
     
-    # 2. 黄金长线分（J列）
+    # 2. 期货持仓对比前一天（F列 > F1，第一行设为0）
+    df["期货持仓较前一日"] = df["期货持仓"].diff() > 0
+    df.loc[df.index[0], "期货持仓较前一日"] = False  # 第一行没有前一天，设为False
+    
+    # 3. 黄金长线分（J列）
     df["黄金长线分"] = (
         -(df["美元"]/100)
         + (4 - df["美债"])/4
         + (df["VIX"] > 20).astype(int)*0.5
         + (df["黄金ETF"] > 1000).astype(int)*0.3
-        + (df["期货持仓"] > df["期货持仓"].shift(1)).astype(int)*0.2
+        + df["期货持仓较前一日"].astype(int)*0.2
         - df["实际利率"]*0.1
         + df["降息预期"]/100
     )
@@ -88,7 +92,7 @@ def calc_all_signals(df):
             return "震荡观望"
     df["黄金长线信号"] = df["黄金长线分"].apply(gold_signal)
     
-    # 3. 外汇长线分（L列）
+    # 4. 外汇长线分（L列）
     df["外汇长线分"] = (
         -(df["美元"]/100)
         + (4 - df["美债"])/4
@@ -110,7 +114,7 @@ def calc_all_signals(df):
             return "观望"
     df["外汇长线信号"] = df["外汇长线分"].apply(fx_signal)
     
-    # 4. 日内信号1分（N列）
+    # 5. 日内信号1分（N列）
     df["日内信号1分"] = (
         -(df["美元"]/100)
         + (4 - df["美债"])/4
@@ -132,7 +136,7 @@ def calc_all_signals(df):
             return "观望"
     df["日内信号1"] = df["日内信号1分"].apply(intra1_signal)
     
-    # 5. 日内信号2分（P列）
+    # 6. 日内信号2分（P列）
     df["日内信号2分"] = (
         -(df["美元"]/100)
         + (4 - df["美债"])/4
@@ -162,7 +166,7 @@ df = pd.DataFrame(st.session_state.history)
 df = calc_all_signals(df)
 
 # ======================
-# 主界面展示（和你表格结构完全一致）
+# 主界面展示
 # ======================
 st.subheader("📜 历史趋势表（和你 Excel 完全一致）")
 st.dataframe(
