@@ -5,40 +5,40 @@ from datetime import datetime
 # ======================
 # 页面设置
 # ======================
-st.set_page_config(page_title="黄金晴雨表", layout="wide")
-st.title("📊 黄金外汇趋势晴雨表")
-st.caption("数据准确 → 信号可靠 → 自动记录历史")
+st.set_page_config(page_title="黄金外汇日内趋势系统", layout="wide")
+st.title("📊 黄金外汇日内趋势系统（1:1 复刻 Excel 公式）")
 st.divider()
 
 # ======================
-# 初始化历史数据
+# 初始化历史数据（用你截图里的真实数据）
 # ======================
 if "history" not in st.session_state:
     st.session_state.history = [
-        {"日期":"2026/3/10","美债":4.11,"美元":98.52,"VIX":17.00,"黄金ETF":1070.70,"通胀":2.35,"降息":20},
-        {"日期":"2026/3/11","美债":4.18,"美元":99.10,"VIX":24.40,"黄金ETF":1073.50,"通胀":2.33,"降息":10},
-        {"日期":"2026/3/12","美债":4.22,"美元":99.40,"VIX":24.30,"黄金ETF":1077.30,"通胀":2.36,"降息":10},
-        {"日期":"2026/3/13","美债":4.25,"美元":100.00,"VIX":24.26,"黄金ETF":1075.80,"通胀":2.38,"降息":10},
-        {"日期":"2026/3/16","美债":4.27,"美元":100.15,"VIX":23.90,"黄金ETF":1074.20,"通胀":2.38,"降息":25},
+        {"日期":"2026/3/10","美债":4.13,"美元":98.62,"VIX":24.00,"黄金ETF":1073.5,"期货持仓":309000,"盈亏平衡":2.32,"通胀":1.81,"降息预期":10},
+        {"日期":"2026/3/11","美债":4.18,"美元":99.10,"VIX":24.40,"黄金ETF":1073.5,"期货持仓":228300,"盈亏平衡":2.33,"通胀":1.85,"降息预期":10},
+        {"日期":"2026/3/12","美债":4.22,"美元":99.40,"VIX":24.30,"黄金ETF":1077.3,"期货持仓":213100,"盈亏平衡":2.36,"通胀":1.86,"降息预期":10},
+        {"日期":"2026/3/13","美债":4.25,"美元":100.00,"VIX":24.26,"黄金ETF":1075.8,"期货持仓":209000,"盈亏平衡":2.38,"通胀":1.87,"降息预期":10},
+        {"日期":"2026/3/16","美债":4.23,"美元":99.96,"VIX":24.70,"黄金ETF":1071.6,"期货持仓":202100,"盈亏平衡":2.36,"通胀":1.87,"降息预期":10},
     ]
 
 today_str = datetime.now().strftime("%Y/%m/%d")
 
 # ======================
-# 侧边栏：今日数据录入
+# 侧边栏：今日数据录入（和你表格字段完全一致）
 # ======================
 with st.sidebar:
-    st.subheader("📝 今日数据")
+    st.subheader("📝 输入今日数据")
     input_date = st.text_input("日期", today_str)
-    bond = st.number_input("美债收益率", value=4.27, step=0.01)
-    usd = st.number_input("美元指数", value=100.15, step=0.01)
-    vix = st.number_input("VIX恐慌指数", value=23.90, step=0.01)
-    gold = st.number_input("黄金ETF(GLD)", value=1074.20, step=0.01)
-    inf = st.number_input("通胀率", value=2.38, step=0.01)
-    cut = st.number_input("降息预期", value=25, step=5)
+    bond = st.number_input("美债收益率", value=4.23, step=0.01)
+    usd = st.number_input("美元指数", value=99.96, step=0.01)
+    vix = st.number_input("VIX", value=24.70, step=0.01)
+    gold_etf = st.number_input("黄金ETF", value=1071.6, step=0.1)
+    futures_pos = st.number_input("期货持仓", value=202100, step=1000)
+    pnl_balance = st.number_input("盈亏平衡", value=2.36, step=0.01)
+    inflation = st.number_input("通胀", value=1.87, step=0.01)
+    rate_cut = st.number_input("降息预期分", value=10, step=5)
 
-    if st.button("✅ 添加今日数据"):
-        # 去重：如果今天已经有了就不重复加
+    if st.button("✅ 添加到历史表"):
         dates = [row["日期"] for row in st.session_state.history]
         if input_date not in dates:
             st.session_state.history.append({
@@ -46,87 +46,142 @@ with st.sidebar:
                 "美债": bond,
                 "美元": usd,
                 "VIX": vix,
-                "黄金ETF": gold,
-                "通胀": inf,
-                "降息": cut
+                "黄金ETF": gold_etf,
+                "期货持仓": futures_pos,
+                "盈亏平衡": pnl_balance,
+                "通胀": inflation,
+                "降息预期": rate_cut
             })
             st.success("添加成功！")
         else:
-            st.warning("今天数据已存在")
+            st.warning("今日数据已存在")
 
 # ======================
-# 自动计算所有信号
+# 核心：100% 复刻你 Excel 的所有公式
+# ======================
+def calc_all_signals(df):
+    df = df.copy()
+    # 1. 实际利率 = 美债 - 通胀（H列）
+    df["实际利率"] = df["美债"] - df["通胀"]
+    
+    # 2. 黄金长线分（J列）
+    df["黄金长线分"] = (
+        -(df["美元"]/100)
+        + (4 - df["美债"])/4
+        + (df["VIX"] > 20).astype(int)*0.5
+        + (df["黄金ETF"] > 1000).astype(int)*0.3
+        + (df["期货持仓"] > df["期货持仓"].shift(1)).astype(int)*0.2
+        - df["实际利率"]*0.1
+        + df["降息预期"]/100
+    )
+    # 黄金长线信号（K列）
+    def gold_signal(score):
+        if score >= 0.8:
+            return "强烈看多"
+        elif score >= 0.3:
+            return "偏多"
+        elif score <= -0.8:
+            return "强烈看空"
+        elif score <= -0.3:
+            return "偏空"
+        else:
+            return "震荡观望"
+    df["黄金长线信号"] = df["黄金长线分"].apply(gold_signal)
+    
+    # 3. 外汇长线分（L列）
+    df["外汇长线分"] = (
+        -(df["美元"]/100)
+        + (4 - df["美债"])/4
+        + (df["VIX"] > 20).astype(int)*0.4
+        - df["实际利率"]*0.15
+        + df["降息预期"]/100
+    )
+    # 外汇长线信号（M列）
+    def fx_signal(score):
+        if score >= 0.7:
+            return "非美多头"
+        elif score >= 0.2:
+            return "非美偏多"
+        elif score <= -0.7:
+            return "非美空头"
+        elif score <= -0.2:
+            return "非美偏空"
+        else:
+            return "观望"
+    df["外汇长线信号"] = df["外汇长线分"].apply(fx_signal)
+    
+    # 4. 日内信号1分（N列）
+    df["日内信号1分"] = (
+        -(df["美元"]/100)
+        + (4 - df["美债"])/4
+        + (df["VIX"] > 22).astype(int)*0.6
+        - df["实际利率"]*0.12
+        + df["降息预期"]/80
+    )
+    # 日内信号1（O列）
+    def intra1_signal(score):
+        if score >= 0.6:
+            return "日内多"
+        elif score >= 0.1:
+            return "偏多观望"
+        elif score <= -0.6:
+            return "日内空"
+        elif score <= -0.1:
+            return "偏空观望"
+        else:
+            return "观望"
+    df["日内信号1"] = df["日内信号1分"].apply(intra1_signal)
+    
+    # 5. 日内信号2分（P列）
+    df["日内信号2分"] = (
+        -(df["美元"]/100)
+        + (4 - df["美债"])/4
+        + (df["VIX"] > 22).astype(int)*0.5
+        - df["实际利率"]*0.18
+        + df["降息预期"]/80
+    )
+    # 日内信号2（Q列）
+    def intra2_signal(score):
+        if score >= 0.5:
+            return "日内多"
+        elif score >= 0.1:
+            return "偏多"
+        elif score <= -0.5:
+            return "日内空"
+        elif score <= -0.1:
+            return "偏空"
+        else:
+            return "观望"
+    df["日内信号2"] = df["日内信号2分"].apply(intra2_signal)
+    return df
+
+# ======================
+# 计算所有历史数据
 # ======================
 df = pd.DataFrame(st.session_state.history)
-
-def calculate_all(df_row, prev_etf):
-    b = df_row["美债"]
-    usd = df_row["美元"]
-    vix = df_row["VIX"]
-    etf = df_row["黄金ETF"]
-    inf = df_row["通胀"]
-    cut = df_row["降息"]
-
-    real = b - inf
-
-    j = -(usd/100) + (4-b)/4 + (0.5 if vix>20 else 0) + (0.3 if etf>1000 else 0) + (0.2 if etf>prev_etf else 0) - real*0.1 + cut/100
-    l = -(usd/100) + (4-b)/4 + (0.4 if vix>20 else 0) - real*0.15 + cut/100
-    n = -(usd/100) + (4-b)/4 + (0.6 if vix>22 else 0) - real*0.12 + cut/80
-    p = -(usd/100) + (4-b)/4 + (0.5 if vix>22 else 0) - real*0.18 + cut/80
-
-    gold_signal = "强烈看多" if j>=0.8 else "偏多" if j>=0.3 else "强烈看空" if j<=-0.8 else "偏空" if j<=-0.3 else "震荡观望"
-    fx_signal   = "非美多头" if l>=0.7 else "非美偏多" if l>=0.2 else "非美空头" if l<=-0.7 else "非美偏空" if l<=-0.2 else "观望"
-    intra1      = "日内多" if n>=0.6 else "偏多观望" if n>=0.1 else "日内空" if n<=-0.6 else "偏空观望" if n<=-0.1 else "观望"
-    intra2      = "日内多" if p>=0.5 else "偏多" if p>=0.1 else "日内空" if p<=-0.5 else "偏空" if p<=-0.1 else "观望"
-
-    return real, gold_signal, fx_signal, intra1, intra2
-
-# 逐行计算
-result = []
-for i, row in df.iterrows():
-    prev_etf = df.iloc[i-1]["黄金ETF"] if i > 0 else row["黄金ETF"]
-    real, gold_sig, fx_sig, in1, in2 = calculate_all(row, prev_etf)
-    result.append({
-        "日期": row["日期"],
-        "美债": row["美债"],
-        "美元": row["美元"],
-        "VIX": row["VIX"],
-        "黄金ETF": row["黄金ETF"],
-        "实际利率": round(real, 3),
-        "黄金趋势": gold_sig,
-        "外汇趋势": fx_sig,
-        "日内1": in1,
-        "日内2": in2
-    })
-
-df_out = pd.DataFrame(result)
-today = df_out.iloc[-1]
+df = calc_all_signals(df)
 
 # ======================
-# 主界面展示
+# 主界面展示（和你表格结构完全一致）
 # ======================
-st.subheader("📈 今日核心指标")
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("美债收益率", f"{today['美债']:.2f}%")
-c2.metric("美元指数", f"{today['美元']:.2f}")
-c3.metric("VIX", f"{today['VIX']:.2f}")
-c4.metric("黄金ETF", f"{today['黄金ETF']:.2f}")
+st.subheader("📜 历史趋势表（和你 Excel 完全一致）")
+st.dataframe(
+    df[["日期","美债","美元","VIX","黄金ETF","期货持仓","盈亏平衡","通胀","实际利率","降息预期",
+        "黄金长线分","黄金长线信号","外汇长线分","外汇长线信号",
+        "日内信号1分","日内信号1","日内信号2分","日内信号2"]],
+    use_container_width=True,
+    hide_index=True
+)
 
 st.divider()
 
-st.subheader("🧠 趋势信号")
-cl, cr = st.columns(2)
-cl.metric("黄金趋势", today["黄金趋势"])
-cr.metric("外汇趋势", today["外汇趋势"])
+# 今日结论展示
+today_data = df.iloc[-1]
+st.subheader("🎯 今日交易信号汇总")
+col1, col2 = st.columns(2)
+col1.metric("黄金长线分", f"{today_data['黄金长线分']:.4f}", today_data['黄金长线信号'])
+col2.metric("外汇长线分", f"{today_data['外汇长线分']:.4f}", today_data['外汇长线信号'])
 
-st.divider()
-
-st.subheader("⚡ 日内交易信号")
-n1, n2 = st.columns(2)
-n1.metric("日内信号1", today["日内1"])
-n2.metric("日内信号2", today["日内2"])
-
-st.divider()
-st.subheader("📜 历史记录")
-st.dataframe(df_out, use_container_width=True, hide_index=True)
-
+col3, col4 = st.columns(2)
+col3.metric("日内信号1分", f"{today_data['日内信号1分']:.4f}", today_data['日内信号1'])
+col4.metric("日内信号2分", f"{today_data['日内信号2分']:.4f}", today_data['日内信号2'])
