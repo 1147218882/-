@@ -1,3 +1,4 @@
-streamlit
-akshare
+yfinance
 pandas
+streamlit
+
